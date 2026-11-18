@@ -2,6 +2,7 @@ name: Notify TermVela of a public release change
 on:
   release:
     types: [published, released, edited, unpublished, deleted, prereleased]
+  public:
   workflow_dispatch:
 permissions: {}
 concurrency:
