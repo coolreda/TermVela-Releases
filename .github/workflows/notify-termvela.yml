@@ -1,0 +1,55 @@
+name: Notify TermVela of a public release change
+on:
+  release:
+    types: [published, released, edited, unpublished, deleted, prereleased]
+  workflow_dispatch:
+permissions: {}
+concurrency:
+  group: termvela-release-notification
+  cancel-in-progress: false
+jobs:
+  notify:
+    environment: release-notifications
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Notify the version API (retry temporary delivery failures)
+        env:
+          HOOK_SECRET: ${{ secrets.TERMVELA_RELEASE_WEBHOOK_SECRET }}
+        run: |
+          python3 - <<'PY'
+          import hashlib, hmac, json, os, time, urllib.error, urllib.request
+          secret = os.environ['HOOK_SECRET'].encode()
+          if len(secret) < 32:
+              raise SystemExit('Configure the distribution repository notification secret')
+          body = json.dumps({'action':'reconcile','repository':{'full_name':os.environ['GITHUB_REPOSITORY']}}).encode()
+          signature = hmac.new(secret, body, hashlib.sha256).hexdigest()
+          url = 'https://api.termvela.com/api/v1/integrations/github/releases'
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self, *args):
+                  return None
+          opener = urllib.request.build_opener(NoRedirect)
+          for delay in (0, 5, 15, 30, 60, 120, 240):
+              time.sleep(delay)
+              req = urllib.request.Request(url, data=body, headers={'Content-Type':'application/json', 'X-GitHub-Event':'release', 'X-Hub-Signature-256':'sha256='+signature})
+              try:
+                  with opener.open(req,timeout=12) as response:
+                      if response.status == 202:
+                          print('TermVela accepted the release notification')
+                          break
+                      raise SystemExit('Unexpected notification response')
+              except urllib.error.HTTPError as error:
+                  if error.code == 403:
+                      settings = 'https://api.termvela.com/api/v1/public/updates/macos/stable/repository'
+                      with opener.open(settings, timeout=12) as result:
+                          selected = json.load(result)['repository']
+                      if selected is None or selected.casefold() != os.environ['GITHUB_REPOSITORY'].casefold():
+                          print('This repository has not been selected in TermVela. Saving it in the admin console triggers a fresh check.')
+                          break
+                  if error.code not in (408, 425, 429) and error.code < 500:
+                      raise SystemExit(f'Notification rejected (HTTP {error.code})')
+              except (urllib.error.URLError, TimeoutError):
+                  pass
+          else:
+              raise SystemExit('Version API unavailable; rerun this workflow to reconcile the current stable release')
+          PY
