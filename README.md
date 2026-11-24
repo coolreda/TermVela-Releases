@@ -2,7 +2,7 @@
 
 TermVela 是 Apple 芯片 Mac 上的 SSH 终端与运维工作台。你可以管理主机、传输文件，并按需将使用数据同步到自己的 WebDAV。
 
-[下载最新版本](https://github.com/timmyraul/TermVela-Releases/releases/latest) · [TermVela 官网](https://termvela.com/)
+[下载最新版本](https://github.com/coolreda/TermVela-Releases/releases/latest) · [TermVela 官网](https://termvela.com/)
 
 ## 安装与更新
 
